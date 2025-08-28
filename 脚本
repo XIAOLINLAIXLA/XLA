@@ -1,0 +1,134 @@
+local ultimateFling = Instance.new("ScreenGui")
+local drag = Instance.new("Frame")
+local UICorner = Instance.new("UICorner")
+local windowNameFrame = Instance.new("Frame")
+local UICorner_2 = Instance.new("UICorner")
+local windowNameLabel = Instance.new("TextLabel")
+local closeButton = Instance.new("TextButton")
+local mainFrame = Instance.new("Frame")
+local UICorner_3 = Instance.new("UICorner")
+local buttonsFrame = Instance.new("Frame")
+local toggleButton = Instance.new("TextButton")
+local UICorner_4 = Instance.new("UICorner")
+local rotSpeedLabel = Instance.new("TextLabel")
+local UICorner_5 = Instance.new("UICorner")
+local rotSpeedTextbox = Instance.new("TextBox")
+local flySpeedLabel = Instance.new("TextLabel")
+local UICorner_6 = Instance.new("UICorner")
+local flySpeedTextbox = Instance.new("TextBox")
+local UICorner_7 = Instance.new("UICorner")
+local notificationsFrame = Instance.new("Frame")
+local UIListLayout = Instance.new("UIListLayout")
+local notificationTemplate = Instance.new("TextLabel")
+local teleportersFrame = Instance.new("Frame")
+local teleportingLabel = Instance.new("TextLabel")
+local UICorner_8 = Instance.new("UICorner")
+local tpingTextbox = Instance.new("TextBox")
+
+ultimateFling.Name = "ultimateFling"
+ultimateFling.Parent = game:GetService("CoreGui")
+ultimateFling.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ultimateFling.ResetOnSpawn = false
+
+drag.Name = "drag"
+drag.Parent = ultimateFling
+drag.Active = true
+drag.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+drag.BackgroundTransparency = 1.000
+drag.Draggable = true
+drag.Position = UDim2.new(0.5, -150, 0.5, -67)
+drag.Selectable = true
+drag.Size = UDim2.new(0, 300, 0, 135)
+
+UICorner.Parent = drag
+
+windowNameFrame.Name = "windowNameFrame"
+windowNameFrame.Parent = drag
+windowNameFrame.BackgroundColor3 = Color3.fromRGB(64, 64, 64)
+windowNameFrame.Size = UDim2.new(1, 0, 0, 30)
+
+UICorner_2.Parent = windowNameFrame
+
+windowNameLabel.Name = "windowNameLabel"
+windowNameLabel.Parent = windowNameFrame
+windowNameLabel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+windowNameLabel.BackgroundTransparency = 1.000
+windowNameLabel.BorderSizePixel = 0
+windowNameLabel.Size = UDim2.new(1, 0, 0, 20)
+windowNameLabel.Font = Enum.Font.SourceSans
+windowNameLabel.Text = "甩飞脚本"
+windowNameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+windowNameLabel.TextSize = 20.000
+
+closeButton.Name = "closeButton"
+closeButton.Parent = windowNameLabel
+closeButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+closeButton.BackgroundTransparency = 1.000
+closeButton.BorderSizePixel = 0
+closeButton.Position = UDim2.new(1, -20, 0, 0)
+closeButton.Size = UDim2.new(0, 20, 0, 20)
+closeButton.Font = Enum.Font.SourceSans
+closeButton.Text = "X"
+closeButton.TextColor3 = Color3.fromRGB(255, 0, 0)
+closeButton.TextSize = 20.000
+
+mainFrame.Name = "mainFrame"
+mainFrame.Parent = drag
+mainFrame.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
+mainFrame.Position = UDim2.new(0, 0, 0, 20)
+mainFrame.Size = UDim2.new(1, 0, 1, -20)
+
+UICorner_3.Parent = mainFrame
+
+buttonsFrame.Name = "buttonsFrame"
+buttonsFrame.Parent = mainFrame
+buttonsFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+buttonsFrame.BackgroundTransparency = 0.500
+buttonsFrame.Size = UDim2.new(0, 110, 1, 0)
+
+toggleButton.Name = "toggleButton"
+toggleButton.Parent = buttonsFrame
+toggleButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.BackgroundTransparency = 0.800
+toggleButton.BorderSizePixel = 0
+toggleButton.Position = UDim2.new(0, 5, 0, 5)
+toggleButton.Size = UDim2.new(0, 100, 0, 25)
+toggleButton.Font = Enum.Font.SourceSans
+toggleButton.Text = "开始甩飞"
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.TextSize = 20.000
+
+UICorner_4.Parent = toggleButton
+
+rotSpeedLabel.Name = "rotSpeedLabel"
+rotSpeedLabel.Parent = buttonsFrame
+rotSpeedLabel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+rotSpeedLabel.BackgroundTransparency = 0.800
+rotSpeedLabel.Position = UDim2.new(0, 5, 0, 35)
+rotSpeedLabel.Size = UDim2.new(0, 100, 0, 35)
+rotSpeedLabel.Font = Enum.Font.SourceSans
+rotSpeedLabel.Text = "旋转速度"
+rotSpeedLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+rotSpeedLabel.TextSize = 14.000
+rotSpeedLabel.TextYAlignment = Enum.TextYAlignment.Top
+
+UICorner_5.Parent = rotSpeedLabel
+
+rotSpeedTextbox.Name = "rotSpeedTextbox"
+rotSpeedTextbox.Parent = rotSpeedLabel
+rotSpeedTextbox.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+rotSpeedTextbox.BackgroundTransparency = 1.000
+rotSpeedTextbox.Position = UDim2.new(0, 0, 0, 13)
+rotSpeedTextbox.Size = UDim2.new(1, 0, 1, -13)
+rotSpeedTextbox.ClearTextOnFocus = false
+rotSpeedTextbox.Font = Enum.Font.SourceSans
+rotSpeedTextbox.Text = "10000"
+rotSpeedTextbox.TextColor3 = Color3.fromRGB(0, 255, 0)
+rotSpeedTextbox.TextSize = 16.000
+
+flySpeedLabel.Name = "flySpeedLabel"
+flySpeedLabel.Parent = buttonsFrame
+flySpeedLabel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+flySpeedLabel.BackgroundTransparency = 0.800
+flySpeedLabel.Position = UDim2.new(0, 5, 0, 75)
+flySpeedLabel.Size = UDim2.new(
