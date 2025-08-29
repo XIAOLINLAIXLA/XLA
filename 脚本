@@ -18,22 +18,9 @@ WindUI:Popup({
     }
 })
 
-Window:Tag({
-        Title = "1.0.0",
-        Color = Color3.fromHex("#30ff6a")
-    })
-    Window:Tag({
-        Title = "测试版", 
-        Color = Color3.fromHex("#315dff")
-    })
-    local TimeTag = Window:Tag({
-        Title = "随缘更新",
-        Color = Color3.fromHex("#000000")
-    })
-
 repeat wait() until Confirmed
 
---
+-- 创建主窗口
 local Window = WindUI:CreateWindow({
     Title = "XLA UI",
     Icon = "rbxassetid://129260712070622",
@@ -48,9 +35,21 @@ local Window = WindUI:CreateWindow({
     ScrollBarEnabled = true,
 })
 
+-- 添加标签
+Window:Tag({
+    Title = "1.0.0",
+    Color = Color3.fromHex("#30ff6a")
+})
+Window:Tag({
+    Title = "测试版", 
+    Color = Color3.fromHex("#315dff")
+})
+local TimeTag = Window:Tag({
+    Title = "随缘更新",
+    Color = Color3.fromHex("#000000")
+})
 
--- 创建指定的大类（作为标签页）
-
+-- 创建标签页
 local Tabs = {
     Main = Window:Tab({ Title = "Main", Icon = "home" }),
     Movement = Window:Tab({ Title = "Movement", Icon = "run" }),
@@ -60,61 +59,204 @@ local Tabs = {
     Exploit = Window:Tab({ Title = "Exploit", Icon = "code" }),
 }
 
-
+-- 默认选择第一个标签页
 Window:SelectTab(1)
 
-
--- 你可以在这里为每个标签页添加自己的功能和UI元素
--- 例如：
-
+-- Main 标签页内容
 Tabs.Main:Paragraph({
-    Title = "欢迎",
-    Desc = "这是你的主页，可以添加一些基本信息或开关。",
+    Title = "欢迎使用 XLA UI",
+    Desc = "这是一个基于 WindUI 库创建的图形用户界面。",
+})
+
+Tabs.Main:Toggle({
+    Title = "启用功能",
+    Desc = "启用主要功能模块",
+    Callback = function(state)
+        print("功能状态:", state)
+    end
+})
+
+Tabs.Main:Button({
+    Title = "刷新游戏",
+    Desc = "重新加载游戏界面",
+    Callback = function()
+        print("刷新游戏功能已触发")
+    end
+})
+
+-- Movement 标签页内容
+Tabs.Movement:Toggle({
+    Title = "速度黑客",
+    Desc = "增加玩家移动速度",
+    Callback = function(state)
+        if state then
+            print("速度黑客已启用")
+        else
+            print("速度黑客已禁用")
+        end
+    end
+})
+
+Tabs.Movement:Slider({
+    Title = "移动速度",
+    Value = {
+        Min = 16,
+        Max = 200,
+        Default = 16,
+    },
+    Callback = function(value)
+        print("移动速度设置为:", value)
+    end
 })
 
 Tabs.Movement:Button({
-    Title = "Teleport to Spawn",
-    Desc = "将你的角色传送到重生点。",
+    Title = "传送到重生点",
+    Desc = "将角色传送到游戏重生点",
     Callback = function()
-        -- 这里添加你的传送代码
+        print("正在传送到重生点...")
+    end
+})
+
+-- Combat 标签页内容
+Tabs.Combat:Toggle({
+    Title = "自动攻击",
+    Desc = "自动攻击附近的敌人",
+    Callback = function(state)
+        if state then
+            print("自动攻击已启用")
+        else
+            print("自动攻击已禁用")
+        end
     end
 })
 
 Tabs.Combat:Toggle({
-    Title = "Auto-Attack",
-    Desc = "自动攻击附近的敌人。",
+    Title = "无限跳跃",
+    Desc = "允许无限次跳跃",
     Callback = function(state)
-        -- 这里添加你的自动攻击代码
+        if state then
+            print("无限跳跃已启用")
+        else
+            print("无限跳跃已禁用")
+        end
     end
 })
 
+Tabs.Combat:Keybind({
+    Title = "快速攻击键",
+    Default = Enum.KeyCode.F,
+    Callback = function(key)
+        print("快速攻击键设置为:", key.Name)
+    end
+})
+
+-- Player 标签页内容
 Tabs.Player:Slider({
-    Title = "WalkSpeed",
+    Title = "跳跃高度",
     Value = {
-        Min = 16,
-        Max = 100,
-        Default = 16,
+        Min = 50,
+        Max = 200,
+        Default = 50,
     },
     Callback = function(value)
-        -- 这里添加修改玩家速度的代码
+        print("跳跃高度设置为:", value)
     end
 })
 
-Tabs.Misc:Input({
-    Title = "Message",
-    Placeholder = "在聊天中发送一条消息",
+Tabs.Player:Toggle({
+    Title = "无敌模式",
+    Desc = "使玩家不受伤害",
+    Callback = function(state)
+        if state then
+            print("无敌模式已启用")
+        else
+            print("无敌模式已禁用")
+        end
+    end
+})
+
+Tabs.Player:Input({
+    Title = "玩家名称",
+    Placeholder = "输入玩家名称",
     Callback = function(text)
-        -- 这里添加在聊天中发送消息的代码
+        print("搜索玩家:", text)
     end
 })
 
-Tabs.Exploit:Code({
-    Title = "Console",
-    Code = [[-- 在这里运行你的代码
-print("Hello World!")
-]],
+-- Misc 标签页内容
+Tabs.Misc:Button({
+    Title = "显示FPS",
+    Desc = "显示当前游戏帧率",
+    Callback = function()
+        print("显示FPS功能已触发")
+    end
 })
 
+Tabs.Misc:Dropdown({
+    Title = "主题选择",
+    Items = {"Dark", "Light", "Blue", "Red", "Green"},
+    Default = "Dark",
+    Callback = function(selection)
+        print("主题更改为:", selection)
+    end
+})
+
+Tabs.Misc:Colorpicker({
+    Title = "界面颜色",
+    Default = Color3.fromRGB(255, 255, 255),
+    Callback = function(color)
+        print("颜色设置为:", color)
+    end
+})
+
+-- Exploit 标签页内容
+Tabs.Exploit:Code({
+    Title = "控制台",
+    Code = [[-- 在这里运行你的Lua代码
+print("Hello from console!")
+game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 50
+]],
+    Callback = function(code)
+        print("执行代码:", code)
+    end
+})
+
+Tabs.Exploit:Button({
+    Title = "执行脚本",
+    Desc = "执行自定义脚本",
+    Callback = function()
+        print("执行脚本功能已触发")
+    end
+})
+
+Tabs.Exploit:Toggle({
+    Title = "开发者模式",
+    Desc = "启用开发者功能",
+    Callback = function(state)
+        if state then
+            print("开发者模式已启用")
+        else
+            print("开发者模式已禁用")
+        end
+    end
+})
+
+-- 关闭事件处理
 Window:OnClose(function()
-    print("UI closed.")
+    print("XLA UI 已关闭")
 end)
+
+-- 可选：添加一些实用功能
+local function updateTimeTag()
+    local currentTime = os.date("%H:%M:%S")
+    TimeTag:Set({
+        Title = "时间: " .. currentTime,
+        Color = Color3.fromHex("#ff6b35")
+    })
+end
+
+-- 每秒钟更新时间标签
+while true do
+    updateTimeTag()
+    wait(1)
+end
