@@ -1,0 +1,860 @@
+-- 实例 (GUI元素 - 无需修改)
+local ScreenGui = Instance.new("ScreenGui")
+local MainFrame = Instance.new("Frame")
+local Title = Instance.new("TextLabel")
+local InnerFrame = Instance.new("Frame")
+local SpeedTextBox = Instance.new("TextBox")
+local DecreaseButton = Instance.new("TextButton")
+local IncreaseButton = Instance.new("TextButton")
+local FlyButton = Instance.new("TextButton")
+local FwFButton = Instance.new("TextButton")
+local DestroyButton = Instance.new("TextButton")
+local ControllerButton = Instance.new("TextButton")
+local UIGradient = Instance.new("UIGradient")
+local UICorner = Instance.new("UICorner")
+local UIStroke = Instance.new("UIStroke")
+
+-- 控制器GUI实例
+local ControllerGui = Instance.new("ScreenGui")
+local ControllerFrame = Instance.new("Frame")
+local ForwardButton = Instance.new("TextButton")
+local BackwardButton = Instance.new("TextButton")
+local LeftButton = Instance.new("TextButton")
+local RightButton = Instance.new("TextButton")
+local AntiLockButton = Instance.new("TextButton")
+local PitchButton = Instance.new("TextButton")
+
+-- 左侧移动GUI
+local LeftSideGui = Instance.new("ScreenGui")
+local LeftSideFrame = Instance.new("Frame")
+local UpButton = Instance.new("TextButton")
+local DownButton = Instance.new("TextButton")
+local RotateLeftButton = Instance.new("TextButton")
+local RotateRightButton = Instance.new("TextButton")
+
+-- 最小化按钮
+local MinimizeButton = Instance.new("TextButton")
+
+-- 全局变量
+local velocityHandlerName = 32
+local gyroHandlerName = 64
+local VelocityHandler = nil
+local GyroHandler = nil
+local isAntiLockOn = false
+local FlyEnabled = false
+local seatConnection = nil
+local unseatConnection = nil
+local flightWithoutFlyEnabled = false
+local isPitchOn = false
+
+-- 跟踪活动连接
+local activeConnections = {}
+local controllerEnabled = false
+local movementDirection = {}
+
+-- 移动速度
+local forwardVelocity = 100 -- 控制前后移动幅度
+local leftVelocity = 100
+local rightVelocity = 100
+local upVelocity = 50
+local downVelocity = 50
+local rotationSpeed = 5
+
+-- GUI最小化状态
+local isGuiMinimized = false
+
+-- 存储最小化前的主框架位置
+local originalMainFramePosition = nil
+
+-- 颜色配置
+local ColorConfig = {
+    MainBackground = Color3.fromRGB(45, 45, 45),
+    SecondaryBackground = Color3.fromRGB(60, 60, 60),
+    ButtonBackground = Color3.fromRGB(80, 80, 80),
+    TextColor = Color3.fromRGB(255, 255, 255),
+    AccentColor = Color3.fromRGB(0, 162, 255),
+    StrokeColor = Color3.fromRGB(20, 20, 20)
+}
+
+local function initializeGUI()
+    -- ScreenGui属性
+    ScreenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.Name = "VehicleFlyGUI"
+    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+    -- 主框架属性
+    MainFrame.Parent = ScreenGui
+    MainFrame.BackgroundColor3 = ColorConfig.MainBackground
+    MainFrame.Position = UDim2.new(0.3, 0, 0.5, -100)
+    MainFrame.Size = UDim2.new(0, 220, 0, 250)
+    MainFrame.Active = true
+    MainFrame.Draggable = true
+
+    -- UIStroke属性
+    UIStroke.Parent = MainFrame
+    UIStroke.Color = ColorConfig.StrokeColor
+    UIStroke.Thickness = 2
+    UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+    -- 标题属性
+    Title.Parent = MainFrame
+    Title.BackgroundTransparency = 1
+    Title.Size = UDim2.new(1, 0, 0.15, 0)
+    Title.Font = Enum.Font.GothamBold
+    Title.Text = "载具飞行控制"
+    Title.TextColor3 = ColorConfig.TextColor
+    Title.TextScaled = true
+
+    -- 内部框架属性
+    InnerFrame.Parent = MainFrame
+    InnerFrame.BackgroundColor3 = ColorConfig.SecondaryBackground
+    InnerFrame.Size = UDim2.new(0.9, 0, 0.75, 0)
+    InnerFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
+    InnerFrame.BorderSizePixel = 0
+
+    -- 速度文本框属性
+    SpeedTextBox.Parent = InnerFrame
+    SpeedTextBox.BackgroundColor3 = ColorConfig.ButtonBackground
+    SpeedTextBox.Position = UDim2.new(0.5, -30, 0.1, 0)
+    SpeedTextBox.Size = UDim2.new(0, 60, 0, 30)
+    SpeedTextBox.Font = Enum.Font.Gotham
+    SpeedTextBox.Text = "1"
+    SpeedTextBox.TextColor3 = ColorConfig.TextColor
+    SpeedTextBox.TextScaled = true
+    SpeedTextBox.PlaceholderText = "速度"
+    SpeedTextBox.PlaceholderColor3 = Color3.fromRGB(180, 180, 180)
+
+    -- 减少按钮属性
+    DecreaseButton.Parent = InnerFrame
+    DecreaseButton.BackgroundColor3 = ColorConfig.ButtonBackground
+    DecreaseButton.Size = UDim2.new(0.2, 0, 0, 25)
+    DecreaseButton.Position = UDim2.new(0.1, 0, 0.1, 0)
+    DecreaseButton.Font = Enum.Font.Gotham
+    DecreaseButton.Text = "-"
+    DecreaseButton.TextColor3 = ColorConfig.TextColor
+    DecreaseButton.TextScaled = true
+
+    -- 增加按钮属性
+    IncreaseButton.Parent = InnerFrame
+    IncreaseButton.BackgroundColor3 = ColorConfig.ButtonBackground
+    IncreaseButton.Size = UDim2.new(0.2, 0, 0, 25)
+    IncreaseButton.Position = UDim2.new(0.7, 0, 0.1, 0)
+    IncreaseButton.Font = Enum.Font.Gotham
+    IncreaseButton.Text = "+"
+    IncreaseButton.TextColor3 = ColorConfig.TextColor
+    IncreaseButton.TextScaled = true
+
+    -- 飞行按钮属性
+    FlyButton.Parent = InnerFrame
+    FlyButton.BackgroundColor3 = ColorConfig.ButtonBackground
+    FlyButton.Size = UDim2.new(0.4, 0, 0, 25)
+    FlyButton.Position = UDim2.new(0.1, 0, 0.33, 0)
+    FlyButton.Font = Enum.Font.GothamBold
+    FlyButton.Text = "飞行"
+    FlyButton.TextColor3 = ColorConfig.TextColor
+    FlyButton.TextScaled = true
+
+    -- 无飞行器飞行按钮属性
+    FwFButton.Parent = InnerFrame
+    FwFButton.BackgroundColor3 = ColorConfig.ButtonBackground
+    FwFButton.Size = UDim2.new(0.4, 0, 0, 25)
+    FwFButton.Position = UDim2.new(0.5, 0, 0.33, 0)
+    FwFButton.Font = Enum.Font.GothamBold
+    FwFButton.Text = "无载具"
+    FwFButton.TextColor3 = ColorConfig.TextColor
+    FwFButton.TextScaled = true
+
+    -- 销毁按钮属性
+    DestroyButton.Parent = InnerFrame
+    DestroyButton.BackgroundColor3 = ColorConfig.ButtonBackground
+    DestroyButton.Size = UDim2.new(0.8, 0, 0, 25)
+    DestroyButton.Position = UDim2.new(0.1, 0, 0.53, 0)
+    DestroyButton.Font = Enum.Font.GothamBold
+    DestroyButton.Text = "销毁界面"
+    DestroyButton.TextColor3 = ColorConfig.TextColor
+    DestroyButton.TextScaled = true
+
+    -- 控制器按钮属性
+    ControllerButton.Parent = InnerFrame
+    ControllerButton.BackgroundColor3 = ColorConfig.ButtonBackground
+    ControllerButton.Size = UDim2.new(0.8, 0, 0, 25)
+    ControllerButton.Position = UDim2.new(0.1, 0, 0.73, 0)
+    ControllerButton.Font = Enum.Font.GothamBold
+    ControllerButton.Text = "控制器"
+    ControllerButton.TextColor3 = ColorConfig.TextColor
+    ControllerButton.TextScaled = true
+
+    -- UICorner属性
+    UICorner.CornerRadius = UDim.new(0.08, 0)
+    UICorner.Parent = MainFrame
+
+    -- 内部框架圆角
+    local InnerCorner = Instance.new("UICorner")
+    InnerCorner.CornerRadius = UDim.new(0.06, 0)
+    InnerCorner.Parent = InnerFrame
+
+    -- 按钮圆角
+    local buttonCorner = Instance.new("UICorner")
+    buttonCorner.CornerRadius = UDim.new(0.1, 0)
+    
+    for _, button in pairs({
+        SpeedTextBox, DecreaseButton, IncreaseButton, 
+        FlyButton, FwFButton, DestroyButton, ControllerButton
+    }) do
+        buttonCorner:Clone().Parent = button
+    end
+
+    -- UIGradient属性
+    UIGradient.Parent = MainFrame
+    UIGradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(45, 45, 45)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(75, 75, 75))
+    }
+    UIGradient.Rotation = 45
+
+    -- 控制器GUI属性
+    ControllerGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+    ControllerGui.ResetOnSpawn = false
+    ControllerGui.Enabled = false
+    ControllerGui.Name = "FlyControllerGUI"
+
+    -- 控制器框架属性
+    ControllerFrame.Parent = ControllerGui
+    ControllerFrame.BackgroundColor3 = ColorConfig.SecondaryBackground
+    ControllerFrame.Position = UDim2.new(0.78, -75, 0.5, -75)
+    ControllerFrame.Size = UDim2.new(0, 160, 0, 160)
+    ControllerFrame.Active = false
+    ControllerFrame.Draggable = false
+
+    local ControllerCorner = Instance.new("UICorner")
+    ControllerCorner.CornerRadius = UDim.new(0.2, 0)
+    ControllerCorner.Parent = ControllerFrame
+
+    -- 前进按钮属性
+    ForwardButton.Parent = ControllerFrame
+    ForwardButton.BackgroundColor3 = ColorConfig.ButtonBackground
+    ForwardButton.Size = UDim2.new(0, 50, 0, 50)
+    ForwardButton.Position = UDim2.new(0.5, -25, 0, 10)
+    ForwardButton.Font = Enum.Font.GothamBold
+    ForwardButton.Text = "▲"
+    ForwardButton.TextColor3 = ColorConfig.TextColor
+    ForwardButton.TextScaled = true
+
+    -- 后退按钮属性
+    BackwardButton.Parent = ControllerFrame
+    BackwardButton.BackgroundColor3 = ColorConfig.ButtonBackground
+    BackwardButton.Size = UDim2.new(0, 50, 0, 50)
+    BackwardButton.Position = UDim2.new(0.5, -25, 0, 85)
+    BackwardButton.Font = Enum.Font.GothamBold
+    BackwardButton.Text = "▼"
+    BackwardButton.TextColor3 = ColorConfig.TextColor
+    BackwardButton.TextScaled = true
+
+    -- 左转按钮属性
+    LeftButton.Parent = ControllerFrame
+    LeftButton.BackgroundColor3 = ColorConfig.ButtonBackground
+    LeftButton.Size = UDim2.new(0, 50, 0, 50)
+    LeftButton.Position = UDim2.new(0, 5, 0.5, -25)
+    LeftButton.Font = Enum.Font.GothamBold
+    LeftButton.Text = "◀"
+    LeftButton.TextColor3 = ColorConfig.TextColor
+    LeftButton.TextScaled = true
+
+    -- 右转按钮属性
+    RightButton.Parent = ControllerFrame
+    RightButton.BackgroundColor3 = ColorConfig.ButtonBackground
+    RightButton.Size = UDim2.new(0, 50, 0, 50)
+    RightButton.Position = UDim2.new(1, -55, 0.5, -25)
+    RightButton.Font = Enum.Font.GothamBold
+    RightButton.Text = "▶"
+    RightButton.TextColor3 = ColorConfig.TextColor
+    RightButton.TextScaled = true
+
+    -- 防锁按钮属性
+    AntiLockButton.Parent = ControllerFrame
+    AntiLockButton.BackgroundColor3 = ColorConfig.ButtonBackground
+    AntiLockButton.Size = UDim2.new(0, 50, 0, 30)
+    AntiLockButton.Position = UDim2.new(0.5, -25, 0, 60)
+    AntiLockButton.Font = Enum.Font.GothamBold
+    AntiLockButton.Text = "防锁"
+    AntiLockButton.TextColor3 = ColorConfig.TextColor
+    AntiLockButton.TextScaled = true
+
+    -- 俯仰按钮属性
+    PitchButton.Parent = ControllerFrame
+    PitchButton.BackgroundColor3 = ColorConfig.ButtonBackground
+    PitchButton.Size = UDim2.new(0, 50, 0, 30)
+    PitchButton.Position = UDim2.new(0.5, -25, 0.5, 30)
+    PitchButton.Font = Enum.Font.GothamBold
+    PitchButton.Text = "俯仰: 关"
+    PitchButton.TextColor3 = ColorConfig.TextColor
+    PitchButton.TextScaled = true
+
+    -- 左侧GUI
+    LeftSideGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+    LeftSideGui.ResetOnSpawn = false
+    LeftSideGui.Enabled = false
+    LeftSideGui.Name = "LeftSideControllerGUI"
+    
+    LeftSideFrame.Parent = LeftSideGui
+    LeftSideFrame.BackgroundColor3 = ColorConfig.SecondaryBackground
+    LeftSideFrame.Position = UDim2.new(0.1, 20, 0.5, -75)
+    LeftSideFrame.Size = UDim2.new(0, 160, 0, 160)
+    LeftSideFrame.Active = false
+    LeftSideFrame.Draggable = false
+
+    local LeftSideCorner = Instance.new("UICorner")
+    LeftSideCorner.CornerRadius = UDim.new(0.2, 0)
+    LeftSideCorner.Parent = LeftSideFrame
+
+    -- 上升按钮属性
+    UpButton.Parent = LeftSideFrame
+    UpButton.BackgroundColor3 = ColorConfig.ButtonBackground
+    UpButton.Size = UDim2.new(0, 50, 0, 50)
+    UpButton.Position = UDim2.new(0.5, -25, 0, 10)
+    UpButton.Font = Enum.Font.GothamBold
+    UpButton.Text = "↑"
+    UpButton.TextColor3 = ColorConfig.TextColor
+    UpButton.TextScaled = true
+
+    -- 下降按钮属性
+    DownButton.Parent = LeftSideFrame
+    DownButton.BackgroundColor3 = ColorConfig.ButtonBackground
+    DownButton.Size = UDim2.new(0, 50, 0, 50)
+    DownButton.Position = UDim2.new(0.5, -25, 0, 90)
+    DownButton.Font = Enum.Font.GothamBold
+    DownButton.Text = "↓"
+    DownButton.TextColor3 = ColorConfig.TextColor
+    DownButton.TextScaled = true
+
+    -- 左旋转按钮属性
+    RotateLeftButton.Parent = LeftSideFrame
+    RotateLeftButton.BackgroundColor3 = ColorConfig.ButtonBackground
+    RotateLeftButton.Size = UDim2.new(0, 50, 0, 50)
+    RotateLeftButton.Position = UDim2.new(0.86, -25, 0, 50)
+    RotateLeftButton.Font = Enum.Font.GothamBold
+    RotateLeftButton.Text = "⟩⟩"
+    RotateLeftButton.TextColor3 = ColorConfig.TextColor
+    RotateLeftButton.TextScaled = true
+
+    -- 右旋转按钮属性
+    RotateRightButton.Parent = LeftSideFrame
+    RotateRightButton.BackgroundColor3 = ColorConfig.ButtonBackground
+    RotateRightButton.Size = UDim2.new(0, 50, 0, 50)
+    RotateRightButton.Position = UDim2.new(0.14, -25, 0, 50)
+    RotateRightButton.Font = Enum.Font.GothamBold
+    RotateRightButton.Text = "⟨⟨"
+    RotateRightButton.TextColor3 = ColorConfig.TextColor
+    RotateRightButton.TextScaled = true
+
+    -- 最小化按钮设置
+    MinimizeButton.Parent = MainFrame
+    MinimizeButton.BackgroundColor3 = ColorConfig.ButtonBackground
+    MinimizeButton.Size = UDim2.new(0, 25, 0, 25)
+    MinimizeButton.Position = UDim2.new(1, -25, 0, 0)
+    MinimizeButton.Font = Enum.Font.GothamBold
+    MinimizeButton.Text = "─"
+    MinimizeButton.TextColor3 = ColorConfig.TextColor
+    MinimizeButton.TextScaled = true
+    MinimizeButton.ZIndex = 2
+    
+    -- 最小化按钮圆角
+    local minimizeCorner = Instance.new("UICorner")
+    minimizeCorner.CornerRadius = UDim.new(0, 5)
+    minimizeCorner.Parent = MinimizeButton
+
+    -- 存储初始位置
+    originalMainFramePosition = MainFrame.Position
+end
+
+local function cleanupConnections()
+    for _, connection in pairs(activeConnections) do
+        if connection and connection.Disconnect then
+            connection:Disconnect()
+        end
+    end
+    activeConnections = {}
+end
+
+-- 设置飞行实例
+local function setupFlyInstances(character)
+    if not character or not character:FindFirstChild("HumanoidRootPart") then
+        return
+    end
+
+    if VelocityHandler then
+        VelocityHandler:Destroy()
+    end
+
+    if GyroHandler then
+        GyroHandler:Destroy()
+    end
+
+    VelocityHandler = Instance.new("BodyVelocity")
+    VelocityHandler.Name = velocityHandlerName
+    VelocityHandler.Parent = character.HumanoidRootPart
+    VelocityHandler.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+    VelocityHandler.Velocity = Vector3.new()
+
+    GyroHandler = Instance.new("BodyGyro")
+    GyroHandler.Name = gyroHandlerName
+    GyroHandler.Parent = character.HumanoidRootPart
+    GyroHandler.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    GyroHandler.P = 1000
+    GyroHandler.D = 50
+    GyroHandler.CFrame = character.HumanoidRootPart.CFrame
+end
+
+-- 启用飞行
+local function EnableFlight()
+    local character = game.Players.LocalPlayer.Character
+    if character then
+        setupFlyInstances(character)
+    end
+end
+
+-- 禁用飞行
+local function DisableFlight()
+    if VelocityHandler then
+        VelocityHandler:Destroy()
+    end
+    if GyroHandler then
+        GyroHandler:Destroy()
+    end
+    VelocityHandler = nil
+    GyroHandler = nil
+end
+
+local function resetControllerOnSpawn()
+    ControllerGui.Enabled = false
+    LeftSideGui.Enabled = false
+end
+
+game.Players.LocalPlayer.CharacterAdded:Connect(resetControllerOnSpawn)
+game.Players.LocalPlayer.CharacterRemoving:Connect(resetControllerOnSpawn)
+
+local function setupButtonConnections()
+    -- 增加和减少按钮
+    table.insert(activeConnections, IncreaseButton.MouseButton1Click:Connect(function()
+        local currentSpeed = tonumber(SpeedTextBox.Text) or 1
+        SpeedTextBox.Text = tostring(currentSpeed + 1)
+    end))
+
+    table.insert(activeConnections, DecreaseButton.MouseButton1Click:Connect(function()
+        local currentSpeed = tonumber(SpeedTextBox.Text) or 1
+        SpeedTextBox.Text = tostring(math.max(1, currentSpeed - 1))
+    end))
+
+    -- 控制器按钮连接
+    table.insert(activeConnections, ForwardButton.MouseButton1Down:Connect(function()
+        table.insert(movementDirection, "forward")
+    end))
+
+    table.insert(activeConnections, ForwardButton.MouseButton1Up:Connect(function()
+        for i = #movementDirection, 1, -1 do
+            if movementDirection[i] == "forward" then
+                table.remove(movementDirection, i)
+            end
+        end
+    end))
+
+    table.insert(activeConnections, BackwardButton.MouseButton1Down:Connect(function()
+        table.insert(movementDirection, "backward")
+    end))
+
+    table.insert(activeConnections, BackwardButton.MouseButton1Up:Connect(function()
+        for i = #movementDirection, 1, -1 do
+            if movementDirection[i] == "backward" then
+                table.remove(movementDirection, i)
+            end
+        end
+    end))
+
+    table.insert(activeConnections, LeftButton.MouseButton1Down:Connect(function()
+        table.insert(movementDirection, "left")
+    end))
+
+    table.insert(activeConnections, LeftButton.MouseButton1Up:Connect(function()
+        for i = #movementDirection, 1, -1 do
+            if movementDirection[i] == "left" then
+                table.remove(movementDirection, i)
+            end
+        end
+    end))
+
+    table.insert(activeConnections, RightButton.MouseButton1Down:Connect(function()
+        table.insert(movementDirection, "right")
+    end))
+
+    table.insert(activeConnections, RightButton.MouseButton1Up:Connect(function()
+        for i = #movementDirection, 1, -1 do
+            if movementDirection[i] == "right" then
+                table.remove(movementDirection, i)
+            end
+        end
+    end))
+
+    table.insert(activeConnections, UpButton.MouseButton1Down:Connect(function()
+        table.insert(movementDirection, "up")
+    end))
+
+    table.insert(activeConnections, UpButton.MouseButton1Up:Connect(function()
+        for i = #movementDirection, 1, -1 do
+            if movementDirection[i] == "up" then
+                table.remove(movementDirection, i)
+            end
+        end
+    end))
+
+    table.insert(activeConnections, DownButton.MouseButton1Down:Connect(function()
+        table.insert(movementDirection, "down")
+    end))
+
+    table.insert(activeConnections, DownButton.MouseButton1Up:Connect(function()
+        for i = #movementDirection, 1, -1 do
+            if movementDirection[i] == "down" then
+                table.remove(movementDirection, i)
+            end
+        end
+    end))
+
+    table.insert(activeConnections, RotateLeftButton.MouseButton1Down:Connect(function()
+        table.insert(movementDirection, "rotateLeft")
+    end))
+
+    table.insert(activeConnections, RotateLeftButton.MouseButton1Up:Connect(function()
+        for i = #movementDirection, 1, -1 do
+            if movementDirection[i] == "rotateLeft" then
+                table.remove(movementDirection, i)
+            end
+        end
+    end))
+
+    table.insert(activeConnections, RotateRightButton.MouseButton1Down:Connect(function()
+        table.insert(movementDirection, "rotateRight")
+    end))
+
+    table.insert(activeConnections, RotateRightButton.MouseButton1Up:Connect(function()
+        for i = #movementDirection, 1, -1 do
+            if movementDirection[i] == "rotateRight" then
+                table.remove(movementDirection, i)
+            end
+        end
+    end))
+
+    table.insert(activeConnections, AntiLockButton.MouseButton1Click:Connect(function()
+        isAntiLockOn = not isAntiLockOn
+        if isAntiLockOn then
+            AntiLockButton.Text = "防锁开"
+            -- 如果防锁开启，关闭俯仰
+            if isPitchOn then
+                PitchButton.Text = "俯仰: 关"
+                isPitchOn = false
+            end
+        else
+            AntiLockButton.Text = "防锁"
+        end
+    end))
+
+    table.insert(activeConnections, PitchButton.MouseButton1Click:Connect(function()
+        if isAntiLockOn then
+            -- 如果防锁开启，不能开启俯仰
+            PitchButton.Text = "俯仰: 关"
+            isPitchOn = false
+        else
+            -- 切换俯仰状态
+            isPitchOn = not isPitchOn
+            if isPitchOn then
+                PitchButton.Text = "俯仰: 开"
+            else
+                PitchButton.Text = "俯仰: 关"
+            end
+        end
+    end))
+end
+
+local function handleInput()
+    local character = game.Players.LocalPlayer.Character
+    if not character then
+        return
+    end
+
+    local humanoid = character:FindFirstChild("Humanoid")
+    if not humanoid then
+        return
+    end
+
+    if FlyEnabled and (humanoid.SeatPart or flightWithoutFlyEnabled) then
+        local rootPart = character:FindFirstChild("HumanoidRootPart")
+        if not rootPart then
+            return
+        end
+
+        if not VelocityHandler then
+            return
+        end
+
+        local gyro = rootPart:FindFirstChild(gyroHandlerName)
+        local speed = tonumber(SpeedTextBox.Text) or 1
+        local velocity = Vector3.new()
+
+        -- 基于当前方向计算移动
+        local function getMovementCFrame()
+            if isPitchOn and gyro then
+                return gyro.CFrame
+            elseif gyro then
+                -- 将方向扁平化为水平面
+                local lookVector = gyro.CFrame.LookVector
+                return CFrame.new(gyro.Parent.Position, gyro.Parent.Position + Vector3.new(lookVector.X, 0, lookVector.Z))
+            end
+            return rootPart.CFrame
+        end
+
+        local movementCFrame = getMovementCFrame()
+
+        for _, direction in ipairs(movementDirection) do
+            if direction == "forward" then
+                velocity += movementCFrame.LookVector * forwardVelocity
+            elseif direction == "backward" then
+                velocity += -movementCFrame.LookVector * forwardVelocity -- 改为使用forwardVelocity
+            elseif direction == "left" then
+                velocity += movementCFrame.RightVector * -leftVelocity
+            elseif direction == "right" then
+                velocity += movementCFrame.RightVector * rightVelocity
+            elseif direction == "up" then
+                velocity += Vector3.new(0, upVelocity, 0)
+            elseif direction == "down" then
+                velocity += Vector3.new(0, -downVelocity, 0)
+            elseif direction == "rotateLeft" and gyro then
+                gyro.CFrame = gyro.CFrame * CFrame.Angles(0, math.rad(-rotationSpeed), 0)
+            elseif direction == "rotateRight" and gyro then
+                gyro.CFrame = gyro.CFrame * CFrame.Angles(0, math.rad(rotationSpeed), 0)
+            end
+        end
+
+        -- 组合移动处理
+        local controlModule = require(game.Players.LocalPlayer.PlayerScripts:WaitForChild("PlayerModule"):WaitForChild("ControlModule"))
+        local thumbstickDirection = controlModule:GetMoveVector()
+
+        if #movementDirection > 0 or thumbstickDirection.Magnitude > 0 then
+            -- 处理控制器按钮和摇杆输入
+            local combinedVelocity = velocity + (
+                movementCFrame.RightVector * thumbstickDirection.X * forwardVelocity * 2 +
+                movementCFrame.LookVector * -thumbstickDirection.Z * forwardVelocity * 2
+            )
+
+            if isAntiLockOn and humanoid.SeatPart then
+                local seatForward = humanoid.SeatPart.CFrame.LookVector
+                local seatRight = humanoid.SeatPart.CFrame.RightVector
+                local seatUp = humanoid.SeatPart.CFrame.UpVector
+                local seatVelocity = Vector3.new()
+
+                -- 计算座位相对移动
+                for _, direction in ipairs(movementDirection) do
+                    if direction == "forward" then
+                        seatVelocity += seatForward * forwardVelocity
+                    elseif direction == "backward" then
+                        seatVelocity += -seatForward * forwardVelocity -- 修正：使用负值表示后退
+                    elseif direction == "left" then
+                        seatVelocity += -seatRight * leftVelocity
+                    elseif direction == "right" then
+                        seatVelocity += seatRight * rightVelocity
+                    elseif direction == "up" then
+                        seatVelocity += seatUp * upVelocity
+                    elseif direction == "down" then
+                        seatVelocity += -seatUp * downVelocity
+                    end
+                end
+                VelocityHandler.Velocity = seatVelocity * speed
+            else
+                VelocityHandler.Velocity = combinedVelocity * speed
+            end
+        else
+            VelocityHandler.Velocity = Vector3.new()
+        end
+
+        -- 更新陀螺仪方向以匹配相机旋转
+        if not isAntiLockOn then
+            local camera = workspace.CurrentCamera
+            if isPitchOn and gyro then
+                -- 完全相机对齐（包括俯仰）
+                gyro.CFrame = camera.CFrame
+            elseif gyro then
+                -- 仅水平对齐（偏航）
+                local flatLookVector = camera.CFrame.LookVector * Vector3.new(1, 0, 1)
+                gyro.CFrame = CFrame.new(gyro.Parent.Position, gyro.Parent.Position + flatLookVector)
+            end
+        end
+    else
+        if VelocityHandler then
+            VelocityHandler.Velocity = Vector3.new()
+        end
+    end
+end
+
+-- 事件监听器设置
+local function setupEventListeners()
+    setupButtonConnections()
+    table.insert(activeConnections, game:GetService("RunService").RenderStepped:Connect(handleInput))
+end
+
+-- 清理（修改为更健壮）
+local function cleanup()
+    DisableFlight()
+    cleanupConnections()
+    movementDirection = {}
+    controllerEnabled = false
+    
+    if seatConnection then
+        seatConnection:Disconnect()
+    end
+    
+    if unseatConnection then
+        unseatConnection:Disconnect()
+    end
+    
+    seatConnection = nil
+    unseatConnection = nil
+    FlyEnabled = false
+    flightWithoutFlyEnabled = false
+    FwFButton.Text = "无载具"
+    
+    -- 销毁所有相关GUI
+    if ScreenGui then
+        ScreenGui:Destroy()
+    end
+    
+    if ControllerGui then
+        ControllerGui:Destroy()
+    end
+    
+    if LeftSideGui then
+        LeftSideGui:Destroy()
+    end
+end
+
+DestroyButton.MouseButton1Click:Connect(cleanup) -- 直接使用清理函数
+
+-- 飞行按钮点击
+FlyButton.MouseButton1Click:Connect(function()
+    FlyEnabled = not FlyEnabled
+    local character = game.Players.LocalPlayer.Character
+    local humanoid = character and character:FindFirstChild("Humanoid")
+    
+    if FlyEnabled then
+        FlyButton.Text = "停止飞行"
+        if flightWithoutFlyEnabled then
+            EnableFlight()
+        elseif humanoid then
+            if seatConnection then
+                seatConnection:Disconnect()
+            end
+            
+            if unseatConnection then
+                unseatConnection:Disconnect()
+            end
+            
+            if humanoid.SeatPart then
+                EnableFlight()
+            else
+                seatConnection = humanoid:GetPropertyChangedSignal("SeatPart"):Connect(function()
+                    if humanoid.SeatPart then
+                        EnableFlight()
+                    end
+                end)
+            end
+            
+            unseatConnection = humanoid:GetPropertyChangedSignal("SeatPart"):Connect(function()
+                if not humanoid.SeatPart then
+                    DisableFlight()
+                end
+            end)
+        end
+    else
+        FlyButton.Text = "飞行"
+        DisableFlight()
+        
+        if seatConnection then
+            seatConnection:Disconnect()
+        end
+        
+        if unseatConnection then
+            unseatConnection:Disconnect()
+        end
+        
+        seatConnection = nil
+        unseatConnection = nil
+    end
+end)
+
+-- 无载具飞行按钮点击
+FwFButton.MouseButton1Click:Connect(function()
+    flightWithoutFlyEnabled = not flightWithoutFlyEnabled
+    if flightWithoutFlyEnabled then
+        FwFButton.Text = "无载具开"
+    else
+        FwFButton.Text = "无载具"
+    end
+    
+    if FlyEnabled and not flightWithoutFlyEnabled then
+        local character = game.Players.LocalPlayer.Character
+        local humanoid = character and character:FindFirstChild("Humanoid")
+        if humanoid and not humanoid.SeatPart then
+            DisableFlight()
+        end
+    end
+end)
+
+ControllerButton.MouseButton1Click:Connect(function()
+    controllerEnabled = not controllerEnabled
+    ControllerGui.Enabled = controllerEnabled
+    LeftSideGui.Enabled = controllerEnabled
+end)
+
+-- 最小化按钮逻辑
+MinimizeButton.MouseButton1Click:Connect(function()
+    isGuiMinimized = not isGuiMinimized
+    
+    if isGuiMinimized then
+        MinimizeButton.Text = "□" -- 最大化图标
+        -- 存储当前位置（最小化前）
+        originalMainFramePosition = MainFrame.Position
+        
+        -- 动画：主框架向上滑动
+        MainFrame:TweenSizeAndPosition(
+            UDim2.new(0, 220, 0, 40), -- 新大小（仅40高度）
+            UDim2.new(
+                MainFrame.Position.X.Scale, 
+                MainFrame.Position.X.Offset, 
+                MainFrame.Position.Y.Scale, 
+                MainFrame.Position.Y.Offset + (MainFrame.Size.Y.Offset - 40) / 2
+            ), -- 垂直居中
+            Enum.EasingDirection.Out,
+            Enum.EasingStyle.Quad,
+            0.3,
+            true
+        )
+        
+        Title.Visible = false
+        InnerFrame.Visible = false
+    else
+        MinimizeButton.Text = "─" -- 最小化图标
+        -- 动画：主框架滑回原始大小/位置
+        MainFrame:TweenSizeAndPosition(
+            UDim2.new(0, 220, 0, 250), -- 原始大小
+            originalMainFramePosition, -- 使用存储的位置
+            Enum.EasingDirection.Out,
+            Enum.EasingStyle.Quad,
+            0.3,
+            true
+        )
+        
+        Title.Visible = true
+        InnerFrame.Visible = true
+    end
+end)
+
+-- 初始化
+initializeGUI()
+setupEventListeners()
