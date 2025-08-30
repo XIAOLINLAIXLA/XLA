@@ -1,16 +1,696 @@
-local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+-- ESP 系统配置
+ESP = ESP or {
+    Enabled = false,
+    ShowBoxes = true,
+    ShowNames = true,
+    ShowTracers = true,
+    ShowHealth = true,
+    Color = nil,
+    HealthColorMode = "match",
+    HealthColorFunction = function(healthPercent)
+        if healthPercent > 0.7 then
+            return Color3.fromRGB(0, 255, 0)
+        elseif healthPercent > 0.3 then
+            return Color3.fromRGB(255, 165, 0)
+        else
+            return Color3.fromRGB(255, 0, 0)
+        end
+    end
+}
+
+local ESPObjects = {}
+
+local function newDrawing(type, props)
+    local obj = Drawing.new(type)
+    for k, v in pairs(props) do
+        obj[k] = v
+    end
+    return obj
+end
+
+local function createESPElements()
+    return {
+        Box = newDrawing("Square", {Visible = false, Thickness = 2, Filled = false, Color = Color3.new(1,1,1)}),
+        Name = newDrawing("Text", {Visible = false, Center = true, Outline = true, Size = 16, Font = 2, Color = Color3.new(1,1,1)}),
+        Tracer = newDrawing("Line", {Visible = false, Thickness = 1, Color = Color3.new(1,1,1)}),
+        HealthText = newDrawing("Text", {Visible = false, Center = true, Outline = true, Size = 14, Font = 2, Color = Color3.new(1,1,1)})
+    }
+end
+
+local function getRainbowColor(t)
+    local freq = 2
+    return Color3.new(
+        math.sin(freq * t) * 0.5 + 0.5,
+        math.sin(freq * t + 2) * 0.5 + 0.5,
+        math.sin(freq * t + 4) * 0.5 + 0.5
+    )
+end
+
+local function getBoxScreenPoints(cframe, size)
+    local half = size / 2
+    local points = {}
+    local visible = true
+    
+    for x = -1, 1, 2 do
+        for y = -1, 1, 2 do
+            for z = -1, 1, 2 do
+                local corner = cframe * Vector3.new(half.X * x, half.Y * y, half.Z * z)
+                local screenPos, onScreen = Camera:WorldToViewportPoint(corner)
+                if not onScreen then
+                    visible = false
+                end
+                table.insert(points, Vector2.new(screenPos.X, screenPos.Y))
+            end
+        end
+    end
+    
+    return points, visible
+end
+
+local function hideAll(data)
+    data.Box.Visible = false
+    data.Name.Visible = false
+    data.Tracer.Visible = false
+    data.HealthText.Visible = false
+end
+
+local function updateESP()
+    if not ESP.Enabled then
+        for _, data in pairs(ESPObjects) do
+            hideAll(data)
+        end
+        return
+    end
+
+    local now = tick()
+    local baseColor = ESP.Color or getRainbowColor(now)
+    local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local character = player.Character
+            local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+            if character and humanoid and humanoid.Health > 0 then
+                local success, cframe, size = pcall(character.GetBoundingBox, character)
+                if success and cframe and size then
+                    local points, visible = getBoxScreenPoints(cframe, size)
+                    if not visible then
+                        if ESPObjects[player] then
+                            hideAll(ESPObjects[player])
+                        end
+                    else
+                        local data = ESPObjects[player] or createESPElements()
+                        ESPObjects[player] = data
+
+                        local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
+                        for _, pt in ipairs(points) do
+                            minX = math.min(minX, pt.X)
+                            minY = math.min(minY, pt.Y)
+                            maxX = math.max(maxX, pt.X)
+                            maxY = math.max(maxY, pt.Y)
+                        end
+
+                        local boxWidth, boxHeight = maxX - minX, maxY - minY
+                        local slimWidth = boxWidth * 0.7
+                        local slimX = minX + (boxWidth - slimWidth) / 2
+
+                        -- 获取血量信息
+                        local currentHealth, maxHealth
+                        local healthSuccess = pcall(function()
+                            currentHealth = math.floor(humanoid.Health)
+                            maxHealth = math.floor(humanoid.MaxHealth)
+                        end)
+                        
+                        if not healthSuccess then
+                            currentHealth = "错误"
+                            maxHealth = "错误"
+                        end
+
+                        if ESP.ShowBoxes then
+                            data.Box.Visible = true
+                            data.Box.Position = Vector2.new(slimX, minY)
+                            data.Box.Size = Vector2.new(slimWidth, boxHeight)
+                            data.Box.Color = baseColor
+                        else
+                            data.Box.Visible = false
+                        end
+
+                        if ESP.ShowNames then
+                            data.Name.Visible = true
+                            data.Name.Text = player.Name
+                            data.Name.Position = Vector2.new(slimX + slimWidth/2, minY - 20)
+                            data.Name.Color = baseColor
+                        else
+                            data.Name.Visible = false
+                        end
+
+                        if ESP.ShowTracers then
+                            data.Tracer.Visible = true
+                            data.Tracer.From = screenCenter
+                            data.Tracer.To = Vector2.new(slimX + slimWidth/2, maxY)
+                            data.Tracer.Color = baseColor
+                        else
+                            data.Tracer.Visible = false
+                        end
+
+                        if ESP.ShowHealth then
+                            data.HealthText.Visible = true
+                            data.HealthText.Text = tostring(currentHealth) .. "/" .. tostring(maxHealth)
+                            data.HealthText.Position = Vector2.new(slimX + slimWidth/2, maxY + 5)
+                            
+                            -- 设置血量文本颜色
+                            if healthSuccess and type(currentHealth) == "number" and type(maxHealth) == "number" then
+                                local healthRatio = math.clamp(currentHealth / maxHealth, 0, 1)
+                                if ESP.HealthColorMode == "custom" and ESP.HealthColorFunction then
+                                    data.HealthText.Color = ESP.HealthColorFunction(healthRatio)
+                                else
+                                    data.HealthText.Color = baseColor
+                                end
+                            else
+                                data.HealthText.Color = Color3.fromRGB(255, 0, 0) -- 错误时显示红色
+                            end
+                        else
+                            data.HealthText.Visible = false
+                        end
+                    end
+                end
+            else
+                if ESPObjects[player] then
+                    hideAll(ESPObjects[player])
+                end
+            end
+        end
+    end
+end
+-- 初始化ESP渲染循环
+RunService.RenderStepped:Connect(updateESP)
+
+-- 玩家离开时清理ESP对象
+Players.PlayerRemoving:Connect(function(player)
+    if ESPObjects[player] then
+        for _, obj in pairs(ESPObjects[player]) do
+            obj:Remove()
+        end
+        ESPObjects[player] = nil
+    end
+end)
+
+-- 角色重生时重新初始化ESP
+LocalPlayer.CharacterAdded:Connect(function(character)
+    -- 清理所有ESP对象
+    for player, data in pairs(ESPObjects) do
+        for _, obj in pairs(data) do
+            obj:Remove()
+        end
+    end
+    ESPObjects = {}
+end)
+local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Guo61/Cat-/refs/heads/main/main.lua"))()
+
+-- 卡密验证变量
+local KeyAuthEnabled = true -- 启用卡密验证
+local CorrectKey = "XLA" -- 正确卡密
+local KeyVerified = false -- 卡密验证状态
+
+-- 卡密系统配置
+local key = "XLA" 
+local keylink = "群号xxxx" 
+local nameofthescript = "XLA脚本" 
+local whoisitmadeby = "淋濑" 
+local thenoteofthekey = "正确卡密: XLA" 
+
+-- 如果启用卡密验证，先显示验证界面
+if KeyAuthEnabled and not KeyVerified then
+    -- 创建卡密验证GUI
+    game:GetService("StarterGui"):SetCore("SendNotification", { 
+        Title = "XLA验证系统",
+        Text = "请输入卡密继续使用",
+        Icon = "rbxassetid://129260712070622",
+        Duration = 5
+    })
+    
+    -- 创建验证界面
+    local ScreenGui = Instance.new("ScreenGui")
+    local KeySystem = Instance.new("Frame")
+    local KeyTextbox = Instance.new("TextBox")
+    local UICorner = Instance.new("UICorner")
+    local UICorner_2 = Instance.new("UICorner")
+    local title = Instance.new("TextLabel")
+    local TextButton = Instance.new("TextButton")
+    local UICorner_3 = Instance.new("UICorner")
+    local scriptname = Instance.new("TextLabel")
+    local madeby = Instance.new("TextLabel")
+    local note = Instance.new("TextLabel")
+
+    ScreenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+    KeySystem.Name = "KeySystem"
+    KeySystem.Parent = ScreenGui
+    KeySystem.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    KeySystem.BorderColor3 = Color3.fromRGB(0, 0, 0)
+    KeySystem.BorderSizePixel = 0
+    KeySystem.Position = UDim2.new(0.35, 0, 0.3, 0)
+    KeySystem.Size = UDim2.new(0.3, 0, 0.35, 0)
+    KeySystem.Selectable = true
+    KeySystem.Active = true
+    KeySystem.Draggable = true
+
+    KeyTextbox.Name = "KeyTextbox"
+    KeyTextbox.Parent = KeySystem
+    KeyTextbox.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    KeyTextbox.BackgroundTransparency = 0.2
+    KeyTextbox.BorderColor3 = Color3.fromRGB(0, 0, 0)
+    KeyTextbox.BorderSizePixel = 0
+    KeyTextbox.Position = UDim2.new(0.1, 0, 0.5, 0)
+    KeyTextbox.Size = UDim2.new(0.8, 0, 0.15, 0)
+    KeyTextbox.Font = Enum.Font.Gotham
+    KeyTextbox.PlaceholderText = "请输入卡密..."
+    KeyTextbox.Text = ""
+    KeyTextbox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    KeyTextbox.TextScaled = true
+    KeyTextbox.TextSize = 14.000
+    KeyTextbox.TextWrapped = true
+
+    UICorner.CornerRadius = UDim.new(0, 8)
+    UICorner.Parent = KeyTextbox
+
+    UICorner_2.CornerRadius = UDim.new(0, 12)
+    UICorner_2.Parent = KeySystem
+
+    title.Name = "title"
+    title.Parent = KeySystem
+    title.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    title.BackgroundTransparency = 1.000
+    title.BorderColor3 = Color3.fromRGB(0, 0, 0)
+    title.BorderSizePixel = 0
+    title.Position = UDim2.new(0, 0, 0.05, 0)
+    title.Size = UDim2.new(1, 0, 0.2, 0)
+    title.Font = Enum.Font.GothamBold
+    title.Text = "XLA 验证系统"
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.TextScaled = true
+    title.TextSize = 16.000
+    title.TextWrapped = true
+
+    TextButton.Parent = KeySystem
+    TextButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+    TextButton.BackgroundTransparency = 0.2
+    TextButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
+    TextButton.BorderSizePixel = 0
+    TextButton.Position = UDim2.new(0.1, 0, 0.7, 0)
+    TextButton.Size = UDim2.new(0.8, 0, 0.15, 0)
+    TextButton.Font = Enum.Font.GothamBold
+    TextButton.Text = "验证卡密"
+    TextButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TextButton.TextScaled = true
+    TextButton.TextSize = 14.000
+    TextButton.TextWrapped = true
+    
+    TextButton.MouseButton1Click:Connect(function()
+        if KeyTextbox.Text == key then
+            TextButton.Text = "验证成功!"
+            KeyVerified = true
+            WindUI:Notify({
+                Title = "验证成功",
+                Desc = "卡密正确，正在进入主界面...",
+                Duration = 3
+            })
+            task.wait(1.5)
+            ScreenGui:Destroy()
+        else
+            TextButton.Text = "卡密错误!"
+            WindUI:Notify({
+                Title = "验证失败",
+                Desc = "卡密错误，请重新输入",
+                Duration = 3
+            })
+            task.wait(2)
+            TextButton.Text = "验证卡密"
+        end
+    end)
+
+    UICorner_3.CornerRadius = UDim.new(0, 8)
+    UICorner_3.Parent = TextButton
+
+    scriptname.Name = "scriptname"
+    scriptname.Parent = KeySystem
+    scriptname.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    scriptname.BackgroundTransparency = 1.000
+    scriptname.BorderColor3 = Color3.fromRGB(0, 0, 0)
+    scriptname.BorderSizePixel = 0
+    scriptname.Position = UDim2.new(0, 0, 0.25, 0)
+    scriptname.Size = UDim2.new(1, 0, 0.1, 0)
+    scriptname.Font = Enum.Font.Gotham
+    scriptname.Text = nameofthescript
+    scriptname.TextColor3 = Color3.fromRGB(200, 200, 200)
+    scriptname.TextScaled = true
+    scriptname.TextSize = 12.000
+    scriptname.TextWrapped = true
+
+    madeby.Name = "madeby"
+    madeby.Parent = KeySystem
+    madeby.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    madeby.BackgroundTransparency = 1.000
+    madeby.BorderColor3 = Color3.fromRGB(0, 0, 0)
+    madeby.BorderSizePixel = 0
+    madeby.Position = UDim2.new(0, 0, 0.35, 0)
+    madeby.Size = UDim2.new(1, 0, 0.1, 0)
+    madeby.Font = Enum.Font.Gotham
+    madeby.Text = "作者: " .. whoisitmadeby
+    madeby.TextColor3 = Color3.fromRGB(200, 200, 200)
+    madeby.TextScaled = true
+    madeby.TextSize = 12.000
+    madeby.TextWrapped = true
+
+    note.Name = "note"
+    note.Parent = KeySystem
+    note.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    note.BackgroundTransparency = 1.000
+    note.BorderColor3 = Color3.fromRGB(0, 0, 0)
+    note.BorderSizePixel = 0
+    note.Position = UDim2.new(0, 0, 0.85, 0)
+    note.Size = UDim2.new(1, 0, 0.1, 0)
+    note.Font = Enum.Font.Gotham
+    note.Text = thenoteofthekey
+    note.TextColor3 = Color3.fromRGB(150, 150, 150)
+    note.TextScaled = true
+    note.TextSize = 11.000
+    note.TextWrapped = true
+    
+    -- 等待验证完成
+    while ScreenGui and ScreenGui.Parent and not KeyVerified do
+        wait(0.1)
+    end
+    if not KeyVerified then return end
+end
+
+-- 状态变量
+local flyEnabled = false
+local flySpeed = 1
+local speedBoostEnabled = false
+local walkSpeed = 16
+local superJumpEnabled = false
+local jumpPower = 100
+local noclipEnabled = false
+local flightConnection
+local noclipConnection
+
+-- 飞行系统特定变量
+local nowe = false
+local speeds = 1
+local tpwalking = false
+local ctrl = {f = 0, b = 0, l = 0, r = 0}
+local lastctrl = {f = 0, b = 0, l = 0, r = 0}
+local maxspeed = 50
+local bg, bv -- BodyGyro and BodyVelocity instances
+
+-- 获取服务
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local localPlayer = Players.LocalPlayer
+
+-- 检测设备类型
+local isMobile = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+
+-- 飞行功能函数
+local function enableFlight()
+    if not localPlayer.Character then 
+        return false
+    end
+    
+    local humanoid = localPlayer.Character:FindFirstChildOfClass("Humanoid")
+    local rootPart = localPlayer.Character:FindFirstChild("HumanoidRootPart")
+    
+    if not humanoid or not rootPart then
+        return false
+    end
+    
+    flyEnabled = true
+    
+    -- 启用飞行系统
+    nowe = true
+    
+    -- 设置飞行状态
+    for i = 1, speeds do
+        spawn(function()
+            local hb = game:GetService("RunService").Heartbeat
+            tpwalking = true
+            local chr = game.Players.LocalPlayer.Character
+            local hum = chr and chr:FindFirstChildWhichIsA("Humanoid")
+            while tpwalking and hb:Wait() and chr and hum and hum.Parent do
+                if hum.MoveDirection.Magnitude > 0 then
+                    chr:TranslateBy(hum.MoveDirection)
+                end
+            end
+        end)
+    end
+    
+    game.Players.LocalPlayer.Character.Animate.Disabled = true
+    local Char = game.Players.LocalPlayer.Character
+    local Hum = Char:FindFirstChildOfClass("Humanoid") or Char:FindFirstChildOfClass("AnimationController")
+
+    for i,v in next, Hum:GetPlayingAnimationTracks() do
+        v:AdjustSpeed(0)
+    end
+    
+    -- 禁用各种状态
+    local states = {
+        Enum.HumanoidStateType.Climbing,
+        Enum.HumanoidStateType.FallingDown,
+        Enum.HumanoidStateType.Flying,
+        Enum.HumanoidStateType.Freefall,
+        Enum.HumanoidStateType.GettingUp,
+        Enum.HumanoidStateType.Jumping,
+        Enum.HumanoidStateType.Landed,
+        Enum.HumanoidStateType.Physics,
+        Enum.HumanoidStateType.PlatformStanding,
+        Enum.HumanoidStateType.Ragdoll,
+        Enum.HumanoidStateType.Running,
+        Enum.HumanoidStateType.RunningNoPhysics,
+        Enum.HumanoidStateType.Seated,
+        Enum.HumanoidStateType.StrafingNoPhysics,
+        Enum.HumanoidStateType.Swimming
+    }
+    
+    for _, state in ipairs(states) do
+        pcall(function()
+            humanoid:SetStateEnabled(state, false)
+        end)
+    end
+    
+    humanoid:ChangeState(Enum.HumanoidStateType.Swimming)
+    
+    -- 创建飞行物理组件
+    if game:GetService("Players").LocalPlayer.Character:FindFirstChildOfClass("Humanoid").RigType == Enum.HumanoidRigType.R6 then
+        local torso = localPlayer.Character:FindFirstChild("Torso")
+        if torso then
+            bg = Instance.new("BodyGyro", torso)
+            bg.P = 9e4
+            bg.maxTorque = Vector3.new(9e9, 9e9, 9e9)
+            bg.cframe = torso.CFrame
+            
+            bv = Instance.new("BodyVelocity", torso)
+            bv.velocity = Vector3.new(0, 0.1, 0)
+            bv.maxForce = Vector3.new(9e9, 9e9, 9e9)
+            
+            humanoid.PlatformStand = true
+        end
+    else
+        local upperTorso = localPlayer.Character:FindFirstChild("UpperTorso")
+        if upperTorso then
+            bg = Instance.new("BodyGyro", upperTorso)
+            bg.P = 9e4
+            bg.maxTorque = Vector3.new(9e9, 9e9, 9e9)
+            bg.cframe = upperTorso.CFrame
+            
+            bv = Instance.new("BodyVelocity", upperTorso)
+            bv.velocity = Vector3.new(0, 0.1, 0)
+            bv.maxForce = Vector3.new(9e9, 9e9, 9e9)
+            
+            humanoid.PlatformStand = true
+        end
+    end
+    
+    -- 开始飞行控制循环
+    if flightConnection then
+        flightConnection:Disconnect()
+    end
+    
+    flightConnection = RunService.Heartbeat:Connect(function()
+        if not flyEnabled or not localPlayer.Character or not bg or not bv then
+            return
+        end
+        
+        local humanoid = localPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if not humanoid or humanoid.Health == 0 then
+            return
+        end
+        
+        -- 更新控制输入
+        ctrl = {f = 0, b = 0, l = 0, r = 0}
+        
+        -- 速度控制
+        if ctrl.l + ctrl.r ~= 0 or ctrl.f + ctrl.b ~= 0 then
+            speed = speed + 0.5 + (speed / maxspeed)
+            if speed > maxspeed then
+                speed = maxspeed
+            end
+        elseif not (ctrl.l + ctrl.r ~= 0 or ctrl.f + ctrl.b ~= 0) and speed ~= 0 then
+            speed = speed - 1
+            if speed < 0 then
+                speed = 0
+            end
+        end
+        
+        -- 应用速度
+        if (ctrl.l + ctrl.r) ~= 0 or (ctrl.f + ctrl.b) ~= 0 then
+            bv.velocity = ((workspace.CurrentCamera.CoordinateFrame.lookVector * (ctrl.f + ctrl.b)) + 
+                          ((workspace.CurrentCamera.CoordinateFrame * CFrame.new(ctrl.l + ctrl.r, (ctrl.f + ctrl.b) * 0.2, 0).p) - 
+                          workspace.CurrentCamera.CoordinateFrame.p)) * speed
+            lastctrl = {f = ctrl.f, b = ctrl.b, l = ctrl.l, r = ctrl.r}
+        elseif (ctrl.l + ctrl.r) == 0 and (ctrl.f + ctrl.b) == 0 and speed ~= 0 then
+            bv.velocity = ((workspace.CurrentCamera.CoordinateFrame.lookVector * (lastctrl.f + lastctrl.b)) + 
+                          ((workspace.CurrentCamera.CoordinateFrame * CFrame.new(lastctrl.l + lastctrl.r, (lastctrl.f + lastctrl.b) * 0.2, 0).p) - 
+                          workspace.CurrentCamera.CoordinateFrame.p)) * speed
+        else
+            bv.velocity = Vector3.new(0, 0, 0)
+        end
+        
+        -- 更新旋转
+        bg.cframe = workspace.CurrentCamera.CoordinateFrame * CFrame.Angles(-math.rad((ctrl.f + ctrl.b) * 50 * speed / maxspeed), 0, 0)
+    end)
+    
+    return true
+end
+
+local function disableFlight()
+    flyEnabled = false
+    nowe = false
+    
+    if flightConnection then
+        flightConnection:Disconnect()
+        flightConnection = nil
+    end
+    
+    if localPlayer.Character then
+        local humanoid = localPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            -- 重新启用所有状态
+            local states = {
+                Enum.HumanoidStateType.Climbing,
+                Enum.HumanoidStateType.FallingDown,
+                Enum.HumanoidStateType.Flying,
+                Enum.HumanoidStateType.Freefall,
+                Enum.HumanoidStateType.GettingUp,
+                Enum.HumanoidStateType.Jumping,
+                Enum.HumanoidStateType.Landed,
+                Enum.HumanoidStateType.Physics,
+                Enum.HumanoidStateType.PlatformStanding,
+                Enum.HumanoidStateType.Ragdoll,
+                Enum.HumanoidStateType.Running,
+                Enum.HumanoidStateType.RunningNoPhysics,
+                Enum.HumanoidStateType.Seated,
+                Enum.HumanoidStateType.StrafingNoPhysics,
+                Enum.HumanoidStateType.Swimming
+            }
+            
+            for _, state in ipairs(states) do
+                pcall(function()
+                    humanoid:SetStateEnabled(state, true)
+                end)
+            end
+            
+            humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+            humanoid.PlatformStand = false
+        end
+        
+        -- 恢复动画
+        local animate = localPlayer.Character:FindFirstChild("Animate")
+        if animate then
+            animate.Disabled = false
+        end
+        
+        -- 清理物理组件
+        if bg then
+            bg:Destroy()
+            bg = nil
+        end
+        
+        if bv then
+            bv:Destroy()
+            bv = nil
+        end
+        
+        tpwalking = false
+    end
+end
+
+-- 穿墙功能
+local function startNoclip()
+    if noclipConnection then
+        noclipConnection:Disconnect()
+    end
+    
+    noclipConnection = RunService.Stepped:Connect(function()
+        if noclipEnabled and localPlayer.Character then
+            for _, part in pairs(localPlayer.Character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
+            end
+        end
+    end)
+end
+
+-- 速度控制函数
+local function updateWalkSpeed()
+    if localPlayer.Character then
+        local humanoid = localPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            if speedBoostEnabled then
+                humanoid.WalkSpeed = walkSpeed
+            else
+                humanoid.WalkSpeed = 16
+            end
+        end
+    end
+end
+
+-- 跳跃控制函数
+local function updateJumpPower()
+    if localPlayer.Character then
+        local humanoid = localPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            if superJumpEnabled then
+                humanoid.JumpPower = jumpPower
+            else
+                humanoid.JumpPower = 50
+            end
+        end
+    end
+end
+
+-- 立即启动飞行和穿墙控制
+startNoclip()
 
 -- Test
 local Confirmed = false
 
 WindUI:Popup({
-    Title = "Welcome! Popup Example",
+    Title = "XLAv1.0",
     Icon = "rbxassetid://129260712070622",
     IconThemed = true,
-    Content = "This is a simplified example UI using the WindUI library.",
+    Content = "欢迎使用XLA的脚本 - 设备: " .. (isMobile and "手机" or "电脑"),
     Buttons = {
         {
-            Title = "Continue",
+            Title = "进入脚本",
             Icon = "arrow-right",
             Callback = function() Confirmed = true end,
             Variant = "Primary",
@@ -20,22 +700,19 @@ WindUI:Popup({
 
 repeat wait() until Confirmed
 
--- 创建主窗口
 local Window = WindUI:CreateWindow({
     Title = "XLA UI",
     Icon = "rbxassetid://129260712070622",
     IconThemed = true,
-    Author = "XLA UI Example",
-    Folder = "GUI",
-    Size = UDim2.fromOffset(580, 460),
+    Author = "作者:淋濑",
+    Folder = "MyGUI",
+    Size = UDim2.fromOffset(580, 340),
     Transparent = true,
     Theme = "Dark",
     User = { Enabled = true },
     SideBarWidth = 200,
     ScrollBarEnabled = true,
 })
-
--- 添加标签
 Window:Tag({
     Title = "1.0.0",
     Color = Color3.fromHex("#30ff6a")
@@ -49,214 +726,750 @@ local TimeTag = Window:Tag({
     Color = Color3.fromHex("#000000")
 })
 
--- 创建标签页
+-- 创建指定的大类（作为标签页）
 local Tabs = {
-    Main = Window:Tab({ Title = "Main", Icon = "home" }),
-    Movement = Window:Tab({ Title = "Movement", Icon = "run" }),
-    Combat = Window:Tab({ Title = "Combat", Icon = "swords" }),
-    Player = Window:Tab({ Title = "Player", Icon = "user" }),
-    Misc = Window:Tab({ Title = "Misc", Icon = "settings" }),
-    Exploit = Window:Tab({ Title = "Exploit", Icon = "code" }),
+    Main = Window:Tab({ Title = "主页", Icon = "rbxassetid://6026568198" }),
+    Movement = Window:Tab({ Title = "人物", Icon = "rbxassetid://94462465090724" }),
+    Combat = Window:Tab({ Title = "战斗", Icon = "swords" }),
+    Player = Window:Tab({ Title = "脚本", Icon = "user" }),
+    Misc = Window:Tab({ Title = "设置", Icon = "settings" }),
+    Exploit = Window:Tab({ Title = "音乐", Icon = "code" }),
 }
 
--- 默认选择第一个标签页
 Window:SelectTab(1)
 
--- Main 标签页内容
+-- 主页面内容
 Tabs.Main:Paragraph({
-    Title = "欢迎使用 XLA UI",
-    Desc = "这是一个基于 WindUI 库创建的图形用户界面。",
+    Title = "欢迎",
+    Desc = "移动增强功能已加载 - 设备: " .. (isMobile and "手机" or "电脑"),
 })
-
-Tabs.Main:Toggle({
-    Title = "启用功能",
-    Desc = "启用主要功能模块",
-    Callback = function(state)
-        print("功能状态:", state)
-    end
+Tabs.Main:Paragraph({
+    Title = "脚本加载成功",
+    Desc = "当前服务器ID: " .. game.PlaceId, -- 显示服务器ID
 })
-
+Tabs.Main:Paragraph({
+    Title = "您的注入器",
+    Desc = ": " .. identifyexecutor(), -- 显示注入器ID
+})
 Tabs.Main:Button({
-    Title = "刷新游戏",
-    Desc = "重新加载游戏界面",
+    Title = "防封",
+    Desc = "执行反作弊- 需要确认",
     Callback = function()
-        print("刷新游戏功能已触发")
+        WindUI:Popup({
+            Title = "警告",
+            Content = "确定要执行反作弊吗？这可能会影响游戏体验。",
+            Buttons = {
+                {
+                    Title = "取消",
+                    Callback = function()
+                        WindUI:Notify({
+                            Title = "已取消",
+                            Desc = "操作已取消",
+                            Duration = 3
+                        })
+                    end,
+                    Variant = "Secondary"
+                },
+                {
+                    Title = "确定执行",
+                    Callback = function()
+                        WindUI:Notify({
+                            Title = "正在加载反作弊...",
+                            Desc = "正在加载反作弊...",
+                            Duration = 3
+                        })
+                        
+                        local success, errorMessage = pcall(function()
+                            loadstring(game:HttpGet("https://raw.githubusercontent.com/XIAOLINLAIXLA/XLA/refs/heads/main/hook%E9%98%B2.lua"))()
+                        end)
+                        
+                        if success then
+                            WindUI:Notify({
+                                Title = "反作弊加载成功！",
+                                Desc = "反作弊加载成功！",
+                                Duration = 5
+                            })
+                        else
+                            WindUI:Notify({
+                                Title = "错误脚本加载失败: " .. tostring(errorMessage),
+                                Desc = "脚本加载失败: " .. tostring(errorMessage),
+                                Duration = 5
+                            })
+                        end
+                    end,
+                    Variant = "Destructive"
+                }
+            }
+        })
     end
 })
 
--- Movement 标签页内容
-Tabs.Movement:Toggle({
-    Title = "速度黑客",
-    Desc = "增加玩家移动速度",
+-- 用于存储滑块最后值和通知计时器
+local lastFlySpeed = 1
+local lastWalkSpeed = 16
+local lastJumpPower = 100
+local notifyCooldown = 0
+local NOTIFY_DELAY = 0.5 -- 0.5秒后显示通知
+local flyToggle = Tabs.Movement:Toggle({
+    Title = "开启绘制",
+    Desc = "启用人物绘制",
     Callback = function(state)
+        ESP.Enabled = state
         if state then
-            print("速度黑客已启用")
+            WindUI:Notify({
+                Title = "绘制已启用",
+                Desc = "ESP人物绘制已启用",
+                Duration = 3
+            })
         else
-            print("速度黑客已禁用")
+            WindUI:Notify({
+                Title = "绘制已禁用",
+                Desc = "ESP人物绘制已禁用",
+                Duration = 3
+            })
         end
     end
 })
 
+-- 添加ESP配置选项
+Tabs.Movement:Toggle({
+    Title = "显示方框",
+    Desc = "显示玩家周围的方框",
+    Default = true,
+    Callback = function(state)
+        ESP.ShowBoxes = state
+    end
+})
+
+Tabs.Movement:Toggle({
+    Title = "显示名字",
+    Desc = "显示玩家名字",
+    Default = true,
+    Callback = function(state)
+        ESP.ShowNames = state
+    end
+})
+
+Tabs.Movement:Toggle({
+    Title = "显示追踪线",
+    Desc = "显示从屏幕底部到玩家的线",
+    Default = true,
+    Callback = function(state)
+        ESP.ShowTracers = state
+    end
+})
+
+Tabs.Movement:Toggle({
+    Title = "显示血量",
+    Desc = "显示玩家血量信息",
+    Default = true,
+    Callback = function(state)
+        ESP.ShowHealth = state
+    end
+})
+
+Tabs.Movement:Toggle({
+    Title = "彩虹模式",
+    Desc = "启用彩虹色效果",
+    Callback = function(state)
+        if state then
+            ESP.Color = nil -- 设置为nil以使用彩虹色
+        else
+            ESP.Color = Color3.new(1, 1, 1) -- 设置为白色
+        end
+    end
+})
+-- Movement 标签页
+local flyToggle = Tabs.Movement:Toggle({
+    Title = "飞行模式",
+    Desc = "启用高级飞行功能，使用WASD控制方向",
+    Callback = function(state)
+        if state then
+            if enableFlight() then
+                WindUI:Notify({
+                    Title = "飞行模式已启用",
+                    Desc = "高级飞行已启用！使用WASD控制方向",
+                    Duration = 3
+                })
+            else
+                flyToggle:Set(false)
+                WindUI:Notify({
+                    Title = "错误",
+                    Desc = "无法启用飞行，请确保角色存在",
+                    Duration = 3
+                })
+            end
+        else
+            disableFlight()
+            WindUI:Notify({
+                Title = "飞行已禁用",
+                Desc = "飞行已禁用",
+                Duration = 3
+            })
+        end
+    end
+})
+
+-- 飞行速度滑块（只在停止调节后显示通知）
 Tabs.Movement:Slider({
-    Title = "移动速度",
+    Title = "飞行速度",
+    Desc = "调整飞行移动速度 (1-200)",
+    Value = {
+        Min = 1,
+        Max = 200,
+        Default = 1,
+    },
+    Callback = function(value)
+        flySpeed = value
+        lastFlySpeed = value
+        maxspeed = value * 10 -- 映射到飞行系统的速度
+        
+        -- 清除之前的计时器
+        if flySpeedNotify then
+            flySpeedNotify:Disconnect()
+        end
+        
+        -- 设置新的计时器，停止调节0.5秒后显示通知
+        flySpeedNotify = game:GetService("RunService").Heartbeat:Connect(function()
+            if tick() - notifyCooldown > NOTIFY_DELAY then
+                WindUI:Notify({
+                    Title = "飞行速度设置为: " .. lastFlySpeed,
+                    Desc = "飞行速度设置为: " .. lastFlySpeed,
+                    Duration = 2
+                })
+                flySpeedNotify:Disconnect()
+            end
+        end)
+        
+        notifyCooldown = tick()
+    end
+})
+
+local speedToggle = Tabs.Movement:Toggle({
+    Title = "超级速度",
+    Desc = "大幅增加地面移动速度",
+    Callback = function(state)
+        speedBoostEnabled = state
+        updateWalkSpeed()
+        if state then
+            WindUI:Notify({
+                Title = "超级速度已启用，速度: " .. walkSpeed,
+                Desc = "已启用，速度: " .. walkSpeed,
+                Duration = 3
+            })
+        else
+            WindUI:Notify({
+                Title = "超级速度已禁用",
+                Desc = "已禁用",
+                Duration = 3
+            })
+        end
+    end
+})
+
+-- 速度值滑块（只在停止调节后显示通知）
+Tabs.Movement:Slider({
+    Title = "速度值",
+    Desc = "设置超级速度的大小 (16-10000)",
     Value = {
         Min = 16,
-        Max = 200,
+        Max = 10000,
         Default = 16,
     },
     Callback = function(value)
-        print("移动速度设置为:", value)
+        walkSpeed = value
+        lastWalkSpeed = value
+        
+        if speedBoostEnabled then
+            updateWalkSpeed()
+        end
+        
+        -- 清除之前的计时器
+        if walkSpeedNotify then
+            walkSpeedNotify:Disconnect()
+        end
+        
+        -- 设置新的计时器，停止调节0.5秒后显示通知
+        walkSpeedNotify = game:GetService("RunService").Heartbeat:Connect(function()
+            if tick() - notifyCooldown > NOTIFY_DELAY then
+                WindUI:Notify({
+                    Title = "速度值设置为: " .. lastWalkSpeed,
+                    Desc = "速度值设置为: " .. lastWalkSpeed,
+                    Duration = 2
+                })
+                walkSpeedNotify:Disconnect()
+            end
+        end)
+        
+        notifyCooldown = tick()
+    end
+})
+
+local jumpToggle = Tabs.Movement:Toggle({
+    Title = "超级跳跃",
+    Desc = "增加跳跃高度",
+    Callback = function(state)
+        superJumpEnabled = state
+        updateJumpPower()
+        if state then
+            WindUI:Notify({
+                Title = "超级跳跃已启用，跳跃高度: " .. jumpPower,
+                Desc = "已启用，跳跃高度: " .. jumpPower,
+                Duration = 3
+            })
+        else
+            WindUI:Notify({
+                Title = "超级跳跃已禁用",
+                Desc = "已禁用",
+                Duration = 3
+            })
+        end
+    end
+})
+
+-- 跳跃高度滑块（只在停止调节后显示通知）
+Tabs.Movement:Slider({
+    Title = "跳跃高度",
+    Desc = "设置跳跃高度 (50-1000)",
+    Value = {
+        Min = 50,
+        Max = 1000,
+        Default = 100,
+    },
+    Callback = function(value)
+        jumpPower = value
+        lastJumpPower = value
+        
+        if superJumpEnabled then
+            updateJumpPower()
+        end
+        
+        -- 清除之前的计时器
+        if jumpPowerNotify then
+            jumpPowerNotify:Disconnect()
+        end
+        
+        -- 设置新的计时器，停止调节0.5秒后显示通知
+        jumpPowerNotify = game:GetService("RunService").Heartbeat:Connect(function()
+            if tick() - notifyCooldown > NOTIFY_DELAY then
+                WindUI:Notify({
+                    Title = "跳跃高度设置为: " .. lastJumpPower,
+                    Desc = "跳跃高度设置为: " .. lastJumpPower,
+                    Duration = 2
+                })
+                jumpPowerNotify:Disconnect()
+            end
+        end)
+        
+        notifyCooldown = tick()
+    end
+})
+
+local noclipToggle = Tabs.Movement:Toggle({
+    Title = "穿墙模式",
+    Desc = "可以穿透墙壁和障碍物",
+    Callback = function(state)
+        noclipEnabled = state
+        if state then
+            WindUI:Notify({
+                Title = "穿墙模式已启用",
+                Desc = "已启用",
+                Duration = 3
+            })
+        else
+            WindUI:Notify({
+                Title = "穿墙模式已禁用",
+                Desc = "已禁用",
+                Duration = 3
+            })
+        end
     end
 })
 
 Tabs.Movement:Button({
     Title = "传送到重生点",
-    Desc = "将角色传送到游戏重生点",
+    Desc = "将你的角色传送到重生点",
     Callback = function()
-        print("正在传送到重生点...")
-    end
-})
-
--- Combat 标签页内容
-Tabs.Combat:Toggle({
-    Title = "自动攻击",
-    Desc = "自动攻击附近的敌人",
-    Callback = function(state)
-        if state then
-            print("自动攻击已启用")
-        else
-            print("自动攻击已禁用")
+        local character = localPlayer.Character
+        if character then
+            local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+            if humanoidRootPart then
+                local spawns = workspace:FindFirstChild("SpawnLocation") or workspace:FindFirstChild("Spawn")
+                if spawns then
+                    humanoidRootPart.CFrame = spawns.CFrame + Vector3.new(0, 5, 0)
+                    WindUI:Notify({
+                        Title = "已传送到重生点",
+                        Desc = "已传送到重生点",
+                        Duration = 3
+                    })
+                else
+                    humanoidRootPart.CFrame = CFrame.new(0, 50, 0)
+                    WindUI:Notify({
+                        Title = "已传送到地图中心",
+                        Desc = "已传送到地图中心",
+                        Duration = 3
+                    })
+                end
+            end
         end
     end
 })
 
-Tabs.Combat:Toggle({
-    Title = "无限跳跃",
-    Desc = "允许无限次跳跃",
+local nightVisionToggle = Tabs.Movement:Toggle({
+    Title = "夜视",
+    Desc = "启用夜视效果，提高环境亮度",
     Callback = function(state)
         if state then
-            print("无限跳跃已启用")
+            game.Lighting.Ambient = Color3.new(1, 1, 1)
+            WindUI:Notify({
+                Title = "夜视已启用",
+                Desc = "夜视效果已激活",
+                Duration = 3
+            })
         else
-            print("无限跳跃已禁用")
+            game.Lighting.Ambient = Color3.new(0, 0, 0)
+            WindUI:Notify({
+                Title = "夜视已禁用",
+                Desc = "夜视效果已关闭",
+                Duration = 3
+            })
         end
     end
 })
 
-Tabs.Combat:Keybind({
-    Title = "快速攻击键",
-    Default = Enum.KeyCode.F,
-    Callback = function(key)
-        print("快速攻击键设置为:", key.Name)
-    end
-})
-
--- Player 标签页内容
-Tabs.Player:Slider({
-    Title = "跳跃高度",
-    Value = {
-        Min = 50,
-        Max = 200,
-        Default = 50,
-    },
-    Callback = function(value)
-        print("跳跃高度设置为:", value)
-    end
-})
-
-Tabs.Player:Toggle({
-    Title = "无敌模式",
-    Desc = "使玩家不受伤害",
+local infiniteJumpToggle = Tabs.Movement:Toggle({
+    Title = "无限跳",
+    Desc = "启用无限跳跃能力",
     Callback = function(state)
         if state then
-            print("无敌模式已启用")
+            loadstring(game:HttpGet("https://pastebin.com/raw/V5PQy3y0", true))()
+            WindUI:Notify({
+                Title = "无限跳已启用",
+                Desc = "无限跳跃功能已激活",
+                Duration = 3
+            })
         else
-            print("无敌模式已禁用")
+            WindUI:Notify({
+                Title = "无限跳已禁用",
+                Desc = "无限跳跃功能已关闭",
+                Duration = 3
+            })
         end
     end
 })
 
-Tabs.Player:Input({
-    Title = "玩家名称",
-    Placeholder = "输入玩家名称",
-    Callback = function(text)
-        print("搜索玩家:", text)
-    end
-})
-
--- Misc 标签页内容
-Tabs.Misc:Button({
-    Title = "显示FPS",
-    Desc = "显示当前游戏帧率",
+local universalEspToggle = Tabs.Movement:Button({
+    Title = "通用ESP",
+    Desc = "启用通用ESP功能，显示玩家位置",
     Callback = function()
-        print("显示FPS功能已触发")
+        loadstring(game:HttpGet('https://raw.githubusercontent.com/Lucasfin000/SpaceHub/main/UESP'))()
+        WindUI:Notify({
+            Title = "通用ESP已启用",
+            Desc = "通用ESP功能已激活",
+            Duration = 3
+        })
     end
 })
 
-Tabs.Misc:Dropdown({
-    Title = "主题选择",
-    Items = {"Dark", "Light", "Blue", "Red", "Green"},
-    Default = "Dark",
-    Callback = function(selection)
-        print("主题更改为:", selection)
-    end
-})
 
-Tabs.Misc:Colorpicker({
-    Title = "界面颜色",
-    Default = Color3.fromRGB(255, 255, 255),
-    Callback = function(color)
-        print("颜色设置为:", color)
-    end
-})
-
--- Exploit 标签页内容
-Tabs.Exploit:Code({
-    Title = "控制台",
-    Code = [[-- 在这里运行你的Lua代码
-print("Hello from console!")
-game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 50
-]],
-    Callback = function(code)
-        print("执行代码:", code)
-    end
-})
-
-Tabs.Exploit:Button({
-    Title = "执行脚本",
-    Desc = "执行自定义脚本",
+-- 自杀功能
+local suicideButton = Tabs.Movement:Button({
+    Title = "自杀",
+    Desc = "立即结束当前角色生命",
     Callback = function()
-        print("执行脚本功能已触发")
+        game.Players.LocalPlayer.Character.Humanoid.Health = 0
+        WindUI:Notify({
+            Title = "自杀执行",
+            Desc = "角色生命值已归零",
+            Duration = 3
+        })
     end
 })
 
-Tabs.Exploit:Toggle({
-    Title = "开发者模式",
-    Desc = "启用开发者功能",
-    Callback = function(state)
-        if state then
-            print("开发者模式已启用")
-        else
-            print("开发者模式已禁用")
-        end
+-- 反挂机功能
+local antiAfkButton = Tabs.Movement:Button({
+    Title = "反挂机v2",
+    Desc = "启用反挂机功能，防止被踢出游戏",
+    Callback = function()
+        loadstring(game:HttpGet("https://pastebin.com/raw/9fFu43FF"))()
+        WindUI:Notify({
+            Title = "反挂机已启用",
+            Desc = "反挂机功能v2已激活",
+            Duration = 3
+        })
     end
 })
 
--- 关闭事件处理
-Window:OnClose(function()
-    print("XLA UI 已关闭")
+-- 角色重生时重新应用设置
+localPlayer.CharacterAdded:Connect(function(character)
+    character:WaitForChild("Humanoid")
+    task.wait(1)
+    
+    updateWalkSpeed()
+    updateJumpPower()
+    
+    -- 如果飞行是开启状态，重新启用飞行
+    if flyEnabled then
+        disableFlight() -- 先清理可能存在的旧状态
+        task.wait(0.5)
+        enableFlight()
+    end
 end)
 
--- 可选：添加一些实用功能
-local function updateTimeTag()
-    local currentTime = os.date("%H:%M:%S")
-    TimeTag:Set({
-        Title = "时间: " .. currentTime,
-        Color = Color3.fromHex("#ff6b35")
-    })
-end
+-- 其他标签页内容...
+Tabs.Player:Button({
+    Title = "自然灾害黑洞(确认)",
+    Desc = "执行自然灾害黑洞脚本 - 需要确认",
+    Callback = function()
+        WindUI:Popup({
+            Title = "警告",
+            Content = "确定要执行自然灾害黑洞脚本吗？这可能会影响游戏体验。",
+            Buttons = {
+                {
+                    Title = "取消",
+                    Callback = function()
+                        WindUI:Notify({
+                            Title = "已取消",
+                            Desc = "操作已取消",
+                            Duration = 3
+                        })
+                    end,
+                    Variant = "Secondary"
+                },
+                {
+                    Title = "确定执行",
+                    Callback = function()
+                        WindUI:Notify({
+                            Title = "正在加载自然灾害黑洞脚本...",
+                            Desc = "正在加载自然灾害黑洞脚本...",
+                            Duration = 3
+                        })
+                        
+                        local success, errorMessage = pcall(function()
+                            loadstring(game:HttpGet("https://pastebin.com/raw/MAnXu0qv"))()
+                        end)
+                        
+                        if success then
+                            WindUI:Notify({
+                                Title = "自然灾害黑洞脚本加载成功！",
+                                Desc = "自然灾害黑洞脚本加载成功！",
+                                Duration = 5
+                            })
+                        else
+                            WindUI:Notify({
+                                Title = "脚本加载失败: " .. tostring(errorMessage),
+                                Desc = "脚本加载失败: " .. tostring(errorMessage),
+                                Duration = 5
+                            })
+                        end
+                    end,
+                    Variant = "Destructive"
+                }
+            }
+        })
+    end
+})
 
--- 每秒钟更新时间标签
-while true do
-    updateTimeTag()
-    wait(1)
-end
+Tabs.Player:Button({
+    Title = "飞车(确认)",
+    Desc = "执行飞车脚本 - 需要确认",
+    Callback = function()
+        WindUI:Popup({
+            Title = "警告",
+            Content = "确定要执行飞车脚本吗？这可能会影响游戏体验。",
+            Buttons = {
+                {
+                    Title = "取消",
+                    Callback = function()
+                        WindUI:Notify({
+                            Title = "已取消",
+                            Desc = "操作已取消",
+                            Duration = 3
+                        })
+                    end,
+                    Variant = "Secondary"
+                },
+                {
+                    Title = "确定执行",
+                    Callback = function()
+                        WindUI:Notify({
+                            Title = "正在加载飞车脚本...",
+                            Desc = "正在加载飞车脚本...",
+                            Duration = 3
+                        })
+                        
+                        local success, errorMessage = pcall(function()
+                            loadstring(game:HttpGet('https://github.com/XIAOLINLAIXLA/XLA/raw/refs/heads/main/%E9%A3%9E%E8%A1%8C'))()
+                        end)
+                        
+                        if success then
+                            WindUI:Notify({
+                                Title = "飞车脚本加载成功！",
+                                Desc = "飞车脚本加载成功！",
+                                Duration = 5
+                            })
+                        else
+                            WindUI:Notify({
+                                Title = "错误脚本加载失败: " .. tostring(errorMessage),
+                                Desc = "脚本加载失败: " .. tostring(errorMessage),
+                                Duration = 5
+                            })
+                        end
+                    end,
+                    Variant = "Destructive"
+                }
+            }
+        })
+    end
+})
+
+Tabs.Player:Button({
+    Title = "Xa汉化墨水游戏脚本",
+    Desc = "执行Xa汉化墨水游戏脚本 - 需要确认",
+    Callback = function()
+        WindUI:Popup({
+            Title = "警告",
+            Content = "确定要执行Xa汉化墨水游戏脚本吗？这可能会影响游戏体验。",
+            Buttons = {
+                {
+                    Title = "取消",
+                    Callback = function()
+                        WindUI:Notify({
+                            Title = "已取消",
+                            Desc = "操作已取消",
+                            Duration = 3
+                        })
+                    end,
+                    Variant = "Secondary"
+                },
+                {
+                    Title = "确定执行",
+                    Callback = function()
+                        WindUI:Notify({
+                            Title = "正在加载Xa汉化墨水游戏脚本...",
+                            Desc = "正在加载Xa汉化墨水游戏脚本...",
+                            Duration = 3
+                        })
+                        
+                        local success, errorMessage = pcall(function()
+                            loadstring(game:HttpGet("https://raw.githubusercontent.com/Xingtaiduan/Script/refs/heads/main/Games/墨水游戏.lua"))()
+                        end)
+                        
+                        if success then
+                            WindUI:Notify({
+                                Title = "Xa汉化墨水游戏脚本加载成功！",
+                                Desc = "Xa汉化墨水游戏脚本加载成功！",
+                                Duration = 5
+                            })
+                        else
+                            WindUI:Notify({
+                                Title = "错误脚本加载失败: " .. tostring(errorMessage),
+                                Desc = "脚本加载失败: " .. tostring(errorMessage),
+                                Duration = 5
+                            })
+                        end
+                    end,
+                    Variant = "Destructive"
+                }
+            }
+        })
+    end
+})
+
+Tabs.Player:Button({
+    Title = "TE汉化墨水游戏脚本",
+    Desc = "执行TE汉化墨水游戏脚本 - 需要确认",
+    Callback = function()
+        WindUI:Popup({
+            Title = "警告",
+            Content = "确定要执行TE汉化墨水游戏脚本吗？这可能会影响游戏体验。",
+            Buttons = {
+                {
+                    Title = "取消",
+                    Callback = function()
+                        WindUI:Notify({
+                            Title = "已取消",
+                            Desc = "操作已取消",
+                            Duration = 3
+                        })
+                    end,
+                    Variant = "Secondary"
+                },
+                {
+                    Title = "确定执行",
+                    Callback = function()
+                        WindUI:Notify({
+                            Title = "正在加载TE汉化墨水游戏脚本...",
+                            Desc = "正在加载TE汉化墨水游戏脚本...",
+                            Duration = 3
+                        })
+                        
+                        local success, errorMessage = pcall(function()
+                            loadstring(game:HttpGet("https://raw.githubusercontent.com/hdjsjjdgrhj/script-hub/refs/heads/main/TexRBLlX"))()
+                        end)
+                        
+                        if success then
+                            WindUI:Notify({
+                                Title = "TE汉化墨水游戏脚本加载成功！",
+                                Desc = "TE汉化墨水游戏脚本加载成功！",
+                                Duration = 5
+                            })
+                        else
+                            WindUI:Notify({
+                                Title = "错误脚本加载失败: " .. tostring(errorMessage),
+                                Desc = "脚本加载失败: " .. tostring(errorMessage),
+                                Duration = 5
+                            })
+                        end
+                    end,
+                    Variant = "Destructive"
+                }
+            }
+        })
+    end
+})
+
+-- 输入处理（WASD控制飞行）
+UserInputService.InputBegan:Connect(function(input, processed)
+    if not processed and flyEnabled then
+        if input.KeyCode == Enum.KeyCode.W then
+            ctrl.f = 1
+        elseif input.KeyCode == Enum.KeyCode.S then
+            ctrl.b = 1
+        elseif input.KeyCode == Enum.KeyCode.A then
+            ctrl.l = 1
+        elseif input.KeyCode == Enum.KeyCode.D then
+            ctrl.r = 1
+        end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input, processed)
+    if not processed and flyEnabled then
+        if input.KeyCode == Enum.KeyCode.W then
+            ctrl.f = 0
+        elseif input.KeyCode == Enum.KeyCode.S then
+            ctrl.b = 0
+        elseif input.KeyCode == Enum.KeyCode.A then
+            ctrl.l = 0
+        elseif input.KeyCode == Enum.KeyCode.D then
+            ctrl.r = 0
+        end
+    end
+end)
+
+-- 初始化完成提示
+WindUI:Notify({
+    Title = "系统加载完成",
+    Desc = "移动增强功能已就绪！设备: " .. (isMobile and "手机" or "电脑"),
+    Duration = 5
+})
+
+-- 清理连接
+game:GetService("Players").LocalPlayer.CharacterAdded:Connect(function(char)
+    wait(0.7)
+    if bg then bg:Destroy() bg = nil end
+    if bv then bv:Destroy() bv = nil end
+    flyEnabled = false
+    nowe = false
+end)
